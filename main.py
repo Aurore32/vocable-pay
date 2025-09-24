@@ -144,7 +144,7 @@ async def create_payment(user_id: str = Depends(get_current_user)):
     )
 
     if code == 200:
-        return {"params": message}
+        return {"params": message, "out_trade_no": out_trade_no}
     else:
         raise HTTPException(status_code=code, detail=message)
 
@@ -215,3 +215,4 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
