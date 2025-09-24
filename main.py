@@ -72,10 +72,12 @@ async def get_current_user(authorization: str = Header(...)) -> str:
                 }
         if not rsa_key:
             raise HTTPException(status_code=401, detail="Could not find appropriate key")
+        
+        public_key = jwt.algorithms.RSAAlgorithm.from_jwk(rsa_key)
 
         payload = jwt.decode(
             token,
-            rsa_key,
+            public_key,
             algorithms=["RS256"],
             audience=COGNITO_APP_CLIENT_ID,
             issuer=f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{COGNITO_USERPOOL_ID}"
@@ -215,4 +217,5 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
