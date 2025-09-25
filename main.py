@@ -144,30 +144,46 @@ async def create_payment(user_id: str = Depends(get_current_user)):
         logging.error(f"DynamoDB Error creating pending transaction: {e}")
         raise HTTPException(status_code=500, detail="Error initiating transaction.")
     
-    code, message = await wxpay.transactions.app(
+    code, message_from_wechat = await wxpay.pay(
         description=description,
         out_trade_no=out_trade_no,
-        amount={'total': total}
+        amount={'total': total},
+        pay_type=WeChatPayType.APP
     )
 
-    if code != 200 or not message or 'prepay_id' not in message:
-        logging.error(f"Failed to get prepay_id from WeChat. Response: {message}")
+    if code != 200 or not isinstance(message_from_wechat, dict) or 'prepay_id' not in message_from_wechat:
+        logging.error(f"Failed to get prepay_id from WeChat. Code: {code}, Response: {message_from_wechat}")
         raise HTTPException(status_code=500, detail="WeChat Pay API error.")
 
-    prepay_id = message['prepay_id']
+    prepay_id = message_from_wechat['prepay_id']
+    logging.info(f"Successfully obtained prepay_id: {prepay_id}")
     
     timestamp = str(int(time.time()))
     nonce_str = get_nonce_str()
+    prepay_id_str = f"prepay_id={prepay_id}"
 
     try:
-        signed_params = wxpay.app_sign(prepay_id=prepay_id, timestamp=timestamp, noncestr=nonce_str)
-        logging.info(f"Successfully signed params for frontend: {signed_params}")
-        return {"params": signed_params, "out_trade_no": out_trade_no}
+        signature = wxpay.sign([wxpay.appid, timestamp, nonce_str, prepay_id_str])
+        logging.info(f"Successfully generated signature.")
+
+        final_params = {
+            "appid": wxpay.appid,
+            "partnerid": wxpay.mchid,
+            "prepayid": prepay_id,
+            "package": "Sign=WXPay",
+            "noncestr": nonce_str,
+            "timestamp": timestamp,
+            "sign": signature
+        }
+        
+        logging.info(f"Assembled final signed params for frontend: {final_params}")
+        return {"params": final_params, "out_trade_no": out_trade_no}
     
     except Exception as e:
-        logging.error(f"Failed to sign the payment parameters: {e}")
-        raise HTTPException(status_code=500, detail="Failed to sign payment parameters.")
-
+        logging.error(f"FATAL: Failed to sign or assemble the payment parameters: {e}")
+        import traceback
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Critical error during payment signing.")
 
 @app.post("/notify")
 async def handle_notification(request: Request):
@@ -236,6 +252,7 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
 
 
