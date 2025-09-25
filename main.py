@@ -119,7 +119,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post("/pay")
 async def create_payment(user_id: str = Depends(get_current_user)):
-    out_trade_no = str(uuid.uuid4())
+    out_trade_no = str(uuid.uuid4()).replace('-', '')
     total = 5000
     description = "Vocable One-Time Test"
 
@@ -217,5 +217,6 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
 
