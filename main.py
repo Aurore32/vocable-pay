@@ -13,6 +13,7 @@ import jwt
 import requests
 import random
 import string
+import json
 
 AWS_REGION = os.environ.get("AWS_REGION")
 COGNITO_USERPOOL_ID = os.environ.get("COGNITO_USERPOOL_ID")
@@ -143,21 +144,25 @@ async def create_payment(user_id: str = Depends(get_current_user)):
     except ClientError as e:
         logging.error(f"DynamoDB Error creating pending transaction: {e}")
         raise HTTPException(status_code=500, detail="Error initiating transaction.")
-    
-    code, message_from_wechat = await wxpay.pay(
+     code, message_from_wechat = await wxpay.pay(
         description=description,
         out_trade_no=out_trade_no,
         amount={'total': total},
         pay_type=WeChatPayType.APP
     )
 
-    if code != 200 or not isinstance(message_from_wechat, dict) or 'prepay_id' not in message_from_wechat:
-        logging.error(f"Failed to get prepay_id from WeChat. Code: {code}, Response: {message_from_wechat}")
+    if code != 200:
+        logging.error(f"Failed to get prepay_id from WeChat. Status Code: {code}, Response: {message_from_wechat}")
         raise HTTPException(status_code=500, detail="WeChat Pay API error.")
 
-    prepay_id = message_from_wechat['prepay_id']
-    logging.info(f"Successfully obtained prepay_id: {prepay_id}")
-    
+    try:
+        data = json.loads(message_from_wechat)
+        prepay_id = data['prepay_id']
+        logging.info(f"Successfully obtained and parsed prepay_id: {prepay_id}")
+    except (json.JSONDecodeError, TypeError, KeyError) as e:
+        logging.error(f"Failed to parse prepay_id from response. Error: {e}, Response: {message_from_wechat}")
+        raise HTTPException(status_code=500, detail="Invalid response from WeChat Pay API.")
+        
     timestamp = str(int(time.time()))
     nonce_str = get_nonce_str()
     prepay_id_str = f"prepay_id={prepay_id}"
@@ -252,6 +257,7 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
 
 
