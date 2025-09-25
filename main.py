@@ -144,7 +144,7 @@ async def create_payment(user_id: str = Depends(get_current_user)):
     except ClientError as e:
         logging.error(f"DynamoDB Error creating pending transaction: {e}")
         raise HTTPException(status_code=500, detail="Error initiating transaction.")
-     code, message_from_wechat = await wxpay.pay(
+    code, message_from_wechat = await wxpay.pay(
         description=description,
         out_trade_no=out_trade_no,
         amount={'total': total},
@@ -257,6 +257,7 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
 
 
