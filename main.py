@@ -165,10 +165,9 @@ async def create_payment(user_id: str = Depends(get_current_user)):
         
     timestamp = str(int(time.time()))
     nonce_str = get_nonce_str()
-    prepay_id_str = f"prepay_id={prepay_id}"
 
     try:
-        signature = wxpay.sign([appid, timestamp, nonce_str, prepay_id_str])
+        signature = wxpay.sign([appid, timestamp, nonce_str, prepay_id])
         logging.info(f"Successfully generated signature.")
 
         final_params = {
@@ -257,6 +256,7 @@ async def query_payment(out_trade_no: str):
     except ClientError as e:
         logging.error(f"DynamoDB Error in /query: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
+
 
 
 
