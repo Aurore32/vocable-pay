@@ -167,12 +167,12 @@ async def create_payment(user_id: str = Depends(get_current_user)):
     nonce_str = get_nonce_str()
 
     try:
-        signature = wxpay.sign([appid, timestamp, nonce_str, prepay_id])
+        signature = wxpay.sign([wxpay.appid, timestamp, nonce_str, prepay_id])
         logging.info(f"Successfully generated signature.")
 
         final_params = {
-            "appid": appid,
-            "partnerid": mchid,
+            "appid": wxpay.appid,
+            "partnerid": wxpay.mchid,
             "prepayid": prepay_id,
             "package": "Sign=WXPay",
             "noncestr": nonce_str,
@@ -193,7 +193,7 @@ async def create_payment(user_id: str = Depends(get_current_user)):
 async def handle_notification(request: Request):
     headers = dict(request.headers)
     body = await request.body()
-    result = await wxpay.callback(headers, body.decode('utf-8'))
+    result = wxpay.callback(headers, body.decode('utf-8'))
 
     if not (result and result.get('event_type') == 'TRANSACTION.SUCCESS'):
         logging.error(f"Notification failed validation or was not a success event: {result}")
@@ -247,19 +247,28 @@ async def query_payment(out_trade_no: str):
         response = TRANSACTIONS_TABLE.get_item(Key={'out_trade_no': out_trade_no})
         item = response.get('Item')
 
-        if item:
-            return {"source": "database", "status": item.get('status'), "data": item}
+        if item and item.get('status') == 'COMPLETED':
+            logging.info(f"Query for {out_trade_no}: Found COMPLETED status in DB.")
+            return {"source": "database", "status": "COMPLETED", "data": item}
 
+        logging.info(f"Query for {out_trade_no}: Status is PENDING or unknown. Querying WeChat API.")
         code, message = await wxpay.query(out_trade_no=out_trade_no)
+
+        if code == 200 and message.get('trade_state') == 'SUCCESS':
+            logging.info(f"Query for {out_trade_no}: WeChat API confirms SUCCESS. Updating local DB.")
+            
+            TRANSACTIONS_TABLE.update_item(
+                Key={'out_trade_no': out_trade_no},
+                UpdateExpression="SET #s = :completed",
+                ExpressionAttributeNames={'#s': 'status'},
+                ExpressionAttributeValues={':completed': 'COMPLETED'}
+            )
+
         return {"source": "wechat_api", "code": code, "message": message}
 
     except ClientError as e:
-        logging.error(f"DynamoDB Error in /query: {e}")
+        logging.error(f"DynamoDB Error in /query for {out_trade_no}: {e}")
         raise HTTPException(status_code=500, detail="Error querying transaction.")
-
-
-
-
 
 
 
