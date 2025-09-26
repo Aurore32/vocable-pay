@@ -167,12 +167,12 @@ async def create_payment(user_id: str = Depends(get_current_user)):
     nonce_str = get_nonce_str()
 
     try:
-        signature = wxpay.sign([wxpay.appid, timestamp, nonce_str, prepay_id])
+        signature = wxpay.sign([appid, timestamp, nonce_str, prepay_id])
         logging.info(f"Successfully generated signature.")
 
         final_params = {
-            "appid": wxpay.appid,
-            "partnerid": wxpay.mchid,
+            "appid": appid,
+            "partnerid": mchid,
             "prepayid": prepay_id,
             "package": "Sign=WXPay",
             "noncestr": nonce_str,
